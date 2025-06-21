@@ -1,10 +1,11 @@
 import React from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Container, Form, Button, Alert, Row, Col } from 'react-bootstrap';
-import { ShortenRequest, LinkInfo } from '../types/api.types';
-import { getLinkInfo, shortenUrl } from '../api/api';
+import { ShortenRequest } from '../types/api.types';
+import { deleteLink, shortenUrl } from '../api/api';
 import { useDelayedValue } from '../hooks/useDelayedValue';
 import axios from 'axios';
+import AnalyticsCard from '../components/Analytics';
 import LinkCard from '../components/LinkCard';
 
 function Home() {
@@ -16,26 +17,9 @@ function Home() {
   const [shortUrl, setShortUrl] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState(false);
-  const [linkInfo, setLinkInfo] = useState<LinkInfo | null>(null);
 
   const delayedShortUrl = useDelayedValue(shortUrl, 200);
   const delayedError = useDelayedValue(error, 200);
-
-  useEffect(() => {
-    const handleFocus = async () => {
-      if (!shortUrl) return;
-      const alias = new URL(shortUrl).pathname.slice(1);
-      try {
-        const info = await getLinkInfo(alias);
-        setLinkInfo(info);
-      } catch (err) {
-        console.error('Failed to update link info', err);
-      }
-    };
-
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [shortUrl]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -43,6 +27,19 @@ function Home() {
       ...prev,
       [name]: value,
     }));
+  };
+
+  const handleDelete = async () => {
+    const alias = shortUrl.split('/').pop();
+    if (!alias) return;
+
+    try {
+      await deleteLink(alias);
+      setShortUrl('');
+    } catch (err) {
+      console.error('Error deleting link:', err);
+      setError('Failed to delete the link');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -59,7 +56,6 @@ function Home() {
       const res = await shortenUrl(cleanedForm);
       setShortUrl(res.shortUrl);
       setError('');
-      setLinkInfo(null);
       setForm({ originalUrl: '', alias: '', expiresAt: '' });
     } catch (err: unknown) {
       if (axios.isAxiosError(err) && typeof err.response?.data?.message === 'string') {
@@ -123,31 +119,10 @@ function Home() {
             </Form>
 
             {delayedShortUrl && (
-              <LinkCard
-                shortUrl={new URL(delayedShortUrl).pathname.slice(1)}
-                onDeleted={() => {
-                  setShortUrl('');
-                  setLinkInfo(null);
-                }}
-                onInfoLoaded={(info) => setLinkInfo({ ...info })}
-              />
-            )}
-
-            {linkInfo && (
-              <Alert variant="info" className="mt-3">
-                <p>
-                  <strong>Original URL:</strong> {linkInfo.shortUrl}
-                </p>
-                <p>
-                  <strong>Created At:</strong> {new Date(linkInfo.createdAt).toLocaleString()}
-                </p>
-                <p>
-                  <strong>Click Count:</strong> {linkInfo.clickCount}
-                </p>
-                <div className="text-end text-success small">
-                  ✔ Обновлено в {new Date().toLocaleTimeString()}
-                </div>
-              </Alert>
+              <>
+                <LinkCard shortUrl={delayedShortUrl} onDelete={handleDelete} />
+                <AnalyticsCard shortUrl={delayedShortUrl} />
+              </>
             )}
 
             {delayedError && (

@@ -10,11 +10,17 @@ export interface ShortenResponse {
 
 export interface LinkInfo {
   shortUrl: string;
+  originalUrl: string;
   createdAt: string;
   clickCount: number;
 }
 
+export interface ClickInfo {
+  ip: string;
+  time: string;
+}
+
 export interface AnalyticsInfo {
-  clickCount: number;
-  recentClicks: string[];
+  totalClicks: number;
+  recentClicks: ClickInfo[];
 }
