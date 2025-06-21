@@ -18,7 +18,7 @@ export class UrlService {
   // Creates a new short URL with custom or generated alias
   async createShortUrl(dto: CreateUrlDto): Promise<Url> {
     const alias = dto.alias ?? this.generateRandomAlias();
-    
+
     // Check if alias already exists
     const exists = await this.urlRepo.findOne({ where: { alias } });
     if (exists) {
@@ -35,7 +35,7 @@ export class UrlService {
   // Finds URL by alias, increments click count, and saves IP statistics
   async findByAlias(alias: string, ip?: string): Promise<Url> {
     const url = await this.urlRepo.findOne({ where: { alias } });
-    
+
     // Check if URL exists and not expired
     if (!url || (url.expiresAt && url.expiresAt < new Date())) {
       throw new NotFoundException('Link has expired or not found');

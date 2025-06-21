@@ -34,17 +34,13 @@ describe('URL Shortener E2E — full coverage', () => {
   });
 
   it('GET /:alias — redirects to original URL', async () => {
-    const res = await request(app.getHttpServer())
-      .get(`/${alias}`)
-      .expect(302);
+    const res = await request(app.getHttpServer()).get(`/${alias}`).expect(302);
 
     expect(res.headers.location).toBe('https://e2e-test.com');
   });
 
   it('GET /info/:alias — returns link info', async () => {
-    const res = await request(app.getHttpServer())
-      .get(`/info/${alias}`)
-      .expect(200);
+    const res = await request(app.getHttpServer()).get(`/info/${alias}`).expect(200);
 
     expect(res.body).toMatchObject({
       originalUrl: 'https://e2e-test.com',
@@ -53,9 +49,7 @@ describe('URL Shortener E2E — full coverage', () => {
   });
 
   it('GET /analytics/:alias — returns recent IPs', async () => {
-    const res = await request(app.getHttpServer())
-      .get(`/analytics/${alias}`)
-      .expect(200);
+    const res = await request(app.getHttpServer()).get(`/analytics/${alias}`).expect(200);
 
     expect(res.body).toHaveProperty('totalClicks');
     expect(res.body).toHaveProperty('recentIps');
@@ -63,14 +57,10 @@ describe('URL Shortener E2E — full coverage', () => {
   });
 
   it('DELETE /delete/:alias — deletes the link', async () => {
-    await request(app.getHttpServer())
-      .delete(`/delete/${alias}`)
-      .expect(200);
+    await request(app.getHttpServer()).delete(`/delete/${alias}`).expect(200);
   });
 
   it('GET /info/:alias — returns 404 after deletion', async () => {
-    await request(app.getHttpServer())
-      .get(`/info/${alias}`)
-      .expect(404);
+    await request(app.getHttpServer()).get(`/info/${alias}`).expect(404);
   });
 });
