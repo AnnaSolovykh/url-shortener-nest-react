@@ -18,7 +18,7 @@ export class UrlService {
   // Creates a new short URL with custom or generated alias
   async createShortUrl(dto: CreateUrlDto): Promise<Url> {
     const alias = dto.alias ?? this.generateRandomAlias();
-
+    
     // Check if alias already exists
     const exists = await this.urlRepo.findOne({ where: { alias } });
     if (exists) {
@@ -29,28 +29,59 @@ export class UrlService {
       ...dto,
       alias,
     });
+
     return this.urlRepo.save(url);
   }
 
-  // Finds URL by alias, increments click count, and saves IP statistics
+  // Finds URL by alias and records click statistics in transaction
   async findByAlias(alias: string, ip?: string): Promise<Url> {
+    console.log(`Finding URL by alias: ${alias}, IP: ${ip}`);
+    
     const url = await this.urlRepo.findOne({ where: { alias } });
-
+    
     // Check if URL exists and not expired
     if (!url || (url.expiresAt && url.expiresAt < new Date())) {
+      console.log(`URL not found or expired for alias: ${alias}`);
       throw new NotFoundException('Link has expired or not found');
     }
 
-    // Increment click counter
-    url.clickCount += 1;
-    await this.urlRepo.save(url);
+    console.log(`URL found: ${url.originalUrl}, current clicks: ${url.clickCount}`);
 
-    // Save click statistics with IP
-    if (ip) {
-      const stat = this.statRepo.create({ ip, url });
-      await this.statRepo.save(stat);
+    try {
+      // Record click in transaction to ensure data consistency
+      await this.urlRepo.manager.transaction(async transactionalEntityManager => {
+        console.log(`Starting transaction for alias: ${alias}`);
+        
+        const incrementResult = await transactionalEntityManager.increment(Url, { id: url.id }, 'clickCount', 1);
+        console.log(`Click count incremented, affected rows: ${incrementResult.affected}`);
+        
+        // Save click statistics with IP
+        if (ip) {
+          const stat = transactionalEntityManager.create(ClickStat, { 
+            ip, 
+            url: { id: url.id } as Url 
+          });
+          const savedStat = await transactionalEntityManager.save(stat);
+          console.log(`Click stat saved:`, {
+            id: savedStat.id,
+            ip: savedStat.ip,
+            clickedAt: savedStat.clickedAt,
+            urlId: url.id
+          });
+        } else {
+          console.log(`No IP provided, skipping stat save`);
+        }
+        
+        console.log(`Transaction completed for alias: ${alias}`);
+      });
+    } catch (error) {
+      console.error(`Transaction failed for alias: ${alias}`, error);
+      throw error;
     }
 
+    url.clickCount += 1;
+    console.log(`Returning URL with updated click count: ${url.clickCount}`);
+    
     return url;
   }
 
@@ -59,7 +90,6 @@ export class UrlService {
     return Math.random().toString(36).substring(2, 8);
   }
 
-  // Returns basic URL information
   async getInfo(alias: string): Promise<Partial<Url>> {
     const url = await this.urlRepo.findOne({ where: { alias } });
     if (!url) {
@@ -73,7 +103,6 @@ export class UrlService {
     };
   }
 
-  // Deletes URL by alias
   async deleteByAlias(alias: string): Promise<void> {
     const result = await this.urlRepo.delete({ alias });
     if (result.affected === 0) {
@@ -82,11 +111,19 @@ export class UrlService {
   }
 
   // Returns analytics: total clicks and last 5 IP addresses
-  async getAnalytics(alias: string): Promise<{ totalClicks: number; recentIps: string[] }> {
+  async getAnalytics(alias: string): Promise<{ 
+    totalClicks: number; 
+    recentClicks: { ip: string; time: Date }[] 
+  }> {
+    console.log(`Getting analytics for alias: ${alias}`);
+    
     const url = await this.urlRepo.findOne({ where: { alias } });
     if (!url) {
+      console.log(`URL not found for analytics: ${alias}`);
       throw new NotFoundException('Link not found');
     }
+
+    console.log(`URL found for analytics: ${url.originalUrl}, total clicks: ${url.clickCount}`);
 
     // Get last 5 click statistics
     const lastStats = await this.statRepo.find({
@@ -95,9 +132,16 @@ export class UrlService {
       take: 5,
     });
 
+    console.log(`Found ${lastStats.length} click statistics records:`, 
+      lastStats.map(s => ({ ip: s.ip, time: s.clickedAt }))
+    );
+
     return {
       totalClicks: url.clickCount,
-      recentIps: lastStats.map((stat) => stat.ip),
+      recentClicks: lastStats.map((s) => ({
+        ip: s.ip,
+        time: s.clickedAt,
+      })),
     };
   }
 }
